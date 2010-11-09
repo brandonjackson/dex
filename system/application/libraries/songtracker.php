@@ -1,10 +1,10 @@
 <?php
 error_reporting(0);
-class Songtracker extends Model {
+class Songtracker {
 
-    var $title   = '';
-    var $content = '';
-    var $date    = '';
+	var $title   = '';
+	var $content = '';
+	var $date    = '';
 	var $artist_id;
 	var $artist = array();
 	var $song_id;
@@ -19,20 +19,21 @@ class Songtracker extends Model {
 	var $song_lastfm_data;
 	var $lastfm_count = 0;
 	var $mb_count = 0;
+	
+	var $CI;
 
-    function __construct()
-    {
-        // Call the Model constructor
-        parent::__construct();
-		$this->load->helper('url');
+	function __construct()
+	{
+		$this->CI =& get_instance();
+		$this->CI->load->helper('url');
 		$this->initialize_lastfm();
-		$this->episode_id = $this->uri->segment(4);
-    }
+		$this->episode_id = $this->CI->uri->segment(4);
+	}
 	
 	// Show & Episode Management
 	function get_shows()
 	{
-		$query = $this->db->query('SELECT * FROM music_shows WHERE show_status=1');
+		$query = $this->CI->db->query('SELECT * FROM music_shows WHERE show_status=1');
 		$shows = array();
 		foreach ( $query->result() as $val )
 		{
@@ -42,11 +43,10 @@ class Songtracker extends Model {
 	}
 	function get_episodes()
 	{
-		$this->load->library('drupal');
-		$episodes = $this->drupal->list_episodes($_POST['show_id']);
+		$this->CI->load->library('drupal');
+		$episodes = $this->CI->drupal->list_episodes($_POST['show_id']);
 		if ($_POST['format'] == 'ul')
 		{
-		
 			if(count($episodes)==0)
 			{
 				echo "No episodes found. Talk to the programming director.</a>";
@@ -75,27 +75,41 @@ class Songtracker extends Model {
 						'episode_start' => $start, 
 						'episode_stop' => $stop, 
 						'show_id' => $_POST['show_id']);
-		$str = $this->db->insert_string('music_episodes', $data); 
-		$this->db->query($str);
-		echo $this->db->insert_id();
+		$str = $this->CI->db->insert_string('music_episodes', $data); 
+		$this->CI->db->query($str);
+		echo $this->CI->db->insert_id();
 	}
 	function load_data( $param, $type = 'playlist' )
 	{
 		if($type=='track')
-			$where = "INNER JOIN music_playlists AS p ON  p.song_id = s.song_id WHERE p.playlist_track_id=".$param." ORDER BY p.sort_order ASC";
+		{
+			$this->CI->db->join("music_playlists AS p ","p.song_id = s.song_id", "INNER");
+			$this->CI->db->where("p.playlist_track_id",$param);
+			$this->CI->db->order_by("p.sort_order","ASC");
+		}
 		elseif($type=='playlist')
-			$where = "INNER JOIN music_playlists AS p ON p.song_id = s.song_id WHERE p.episode_id=".$param." AND p.status=1 ORDER BY p.sort_order ASC";
+		{
+			$this->CI->db->join("music_playlists AS p ", "p.song_id = s.song_id", "inner");
+			$this->CI->db->where("p.episode_id",$param);
+			$this->CI->db->where("p.status",1);
+			$this->CI->db->order_by("p.sort_order","ASC");
+		}
 		elseif($type=='song')
-			$where = "WHERE s.song_id=".$param;
-			
-		$sql = "SELECT ";
-		if($type!="song")  $sql .= "p.playlist_track_id, p.episode_id, p.sort_order, p.date_added, p.status,";
-		$sql .= "s.song_id, s.song_title,  s.song_track, a.artist_id, a.artist_name, r.album_id, r.album_title, r.album_date, r.label_id
-			FROM music_songs AS s
-			INNER JOIN music_artists AS a ON s.artist_id=a.artist_id
-			LEFT JOIN music_albums AS r ON r.album_id=s.album_id
-			".$where;
-		$query = $this->db->query( $sql );
+		{
+			$this->CI->db->where("s.song_id",$param);
+		}
+		if($type!="song")
+		{
+			$this->CI->db->select("p.playlist_track_id, p.episode_id, p.sort_order, p.date_added, p.status,s.song_id, s.song_title,  s.song_track, a.artist_id, a.artist_name, r.album_id, r.album_title, r.album_date, r.label_id");
+		}
+		else
+		{
+			$this->CI->db->select("s.song_id, s.song_title,  s.song_track, a.artist_id, a.artist_name, r.album_id, r.album_title, r.album_date, r.label_id");
+		}
+		$this->CI->db->from("music_songs AS s ");
+		$this->CI->db->join("music_artists AS a ","s.artist_id = a.artist_id", "inner");
+		$this->CI->db->join("music_albums AS r ","r.album_id=s.album_id", "left");
+		$query = $this->CI->db->get();
 
 		if($type!='playlist')
 		{
@@ -132,7 +146,7 @@ class Songtracker extends Model {
 		$r .= "  <span class='track_song'>".stripslashes($track['song_title'])."</span>";
 		$r .= "  <div class='track_menu'>";
 		$r .= "	   <a class='iframe track_options' href='".site_url('meta/ajaxData/track_options/'.$track['playlist_track_id'])."'>Options</a>";
-		$r .= "    <span class='sort_handle'><img src='".$this->config->item('url_img')."sort_handle.png' /></span>";
+		$r .= "    <span class='sort_handle'><img src='".$this->CI->config->item('url_img')."sort_handle.png' /></span>";
 		$r .= "  </div>";
 		$r .= "  <input type='hidden' class='album_title' value='".$track['album_title']."' />";
 		$r .= "  <input type='hidden' class='album_id' value='".$track['album_id']."' />";
@@ -145,10 +159,10 @@ class Songtracker extends Model {
 	public function get_logs($type = 'count', $param_1=50, $param_2=0, $order_by = NULL)
 	{
 		if ( $type == "count" )
-			$this->db->limit(($param_2+$param_1), $param_2);
+			$this->CI->db->limit(($param_2+$param_1), $param_2);
 		elseif ($type == "dates")
-			$this->db->where("l.log_time BETWEEN '".date("Y-m-d H:i:s", strtotime($param_1))."' AND '".date("Y-m-d H:i:s", strtotime($param_2))."'");
-		$this->db	->select("l.log_id, l.log_time, l.playlist_track_id, p.song_id, s.song_title, a.artist_id, a.artist_name, al.album_id, al.album_title, p.episode_id")
+			$this->CI->db->where("l.log_time BETWEEN '".date("Y-m-d H:i:s", strtotime($param_1))."' AND '".date("Y-m-d H:i:s", strtotime($param_2))."'");
+		$this->CI->db	->select("l.log_id, l.log_time, l.playlist_track_id, p.song_id, s.song_title, a.artist_id, a.artist_name, al.album_id, al.album_title, p.episode_id")
 				->from('music_log AS l ')
 				->join('music_playlists AS p ', 'l.playlist_track_id = p.playlist_track_id')
 				->join('music_songs AS s ', 'p.song_id = s.song_id')
@@ -156,10 +170,10 @@ class Songtracker extends Model {
 				->join('music_albums AS al ', 's.album_id = al.album_id', 'left');
 		
 		if($order_by == "asc")
-			$this->db->order_by('l.log_id', 'ASC');
+			$this->CI->db->order_by('l.log_id', 'ASC');
 		else
-			$this->db->order_by('l.log_id', 'DESC');
-		$query = $this->db->get();
+			$this->CI->db->order_by('l.log_id', 'DESC');
+		$query = $this->CI->db->get();
 		return $query->result_array();
 	}
     	public function load_choices ( $type , $data )
@@ -259,13 +273,13 @@ class Songtracker extends Model {
 		$this->artist_id = $this->find_artist( $_POST['artist'] );
 		
 		// load database info on artist, save
-		$artist_query = $this->db->where('artist_id', $this->artist_id)->get('music_artists');
+		$artist_query = $this->CI->db->where('artist_id', $this->artist_id)->get('music_artists');
 		$this->artist = $artist_query->row_array();
 
 		////////////////////////////
 		// FIND THE SONG//
 		////////////////////////////
-		$this->benchmark->mark('find_song_start');
+		$this->CI->benchmark->mark('find_song_start');
 		$this->song_lastfm_data = $this->lastfm_query("track.getInfo", array("track"=>$_POST['song'], "artist"=>$this->artist['artist_name']));
 		
 		if(isset($this->song_lastfm_data['name'])) $song = $this->song_lastfm_data['name'];
@@ -302,7 +316,7 @@ class Songtracker extends Model {
 			if ( count($this->albums)==1 )
 			{
 				// Check to see if album exists.
-				$existing_album = 	$this->db->query("SELECT * FROM music_albums WHERE album_title= ? AND artist_id = ?", 
+				$existing_album = 	$this->CI->db->query("SELECT * FROM music_albums WHERE album_title= ? AND artist_id = ?", 
 												array(	$this->albums[0]['name'], 
 														$this->artist_id));
 				
@@ -310,7 +324,7 @@ class Songtracker extends Model {
 				if ( $existing_album->num_rows==1 )
 				{
 					$ex_row = $existing_album->row();
-					$this->db->query("UPDATE music_songs SET album_id= ? AND flag = 0 WHERE song_id = ?",
+					$this->CI->db->query("UPDATE music_songs SET album_id= ? AND flag = 0 WHERE song_id = ?",
 									array(	$ex_row->album_id, 
 											$this->song_id));
 				}
@@ -323,9 +337,9 @@ class Songtracker extends Model {
 					
 					if (isset($this->duplicate_song_id)&&$this->duplicate_song_id!="")
 					{
-						$this->db->query("DELETE FROM music_songs WHERE song_id = ?",
+						$this->CI->db->query("DELETE FROM music_songs WHERE song_id = ?",
 									array($this->song_id));
-						$this->db->query("UPDATE music_songs SET song_id= ? WHERE song_id = ?",
+						$this->CI->db->query("UPDATE music_songs SET song_id= ? WHERE song_id = ?",
 									array($this->song_id, $this->duplicate_song_id));
 					}
 				
@@ -341,7 +355,7 @@ class Songtracker extends Model {
 										"html"=>$html
 										));
 										*/
-				$this->db->query("UPDATE music_songs SET flag=1 WHERE song_id = ?",
+				$this->CI->db->query("UPDATE music_songs SET flag=1 WHERE song_id = ?",
 							array( 	$this->song_id ));
 				$this->add_track();
 			}
@@ -354,8 +368,8 @@ class Songtracker extends Model {
 			}
 		}
 		
-		$this->benchmark->mark('find_album_end');
-		$this->benchmark->elapsed_time('find_album_start', 'find_album_end');
+		$this->CI->benchmark->mark('find_album_end');
+		$this->CI->benchmark->elapsed_time('find_album_start', 'find_album_end');
 	}
 	function save_final_choice()
 	{
@@ -366,12 +380,13 @@ class Songtracker extends Model {
 			$this->song = $this->load_data($this->song_id, "song");
 			$album = $this->lastfm_query("album.getInfo", array("album"=>$array[2], "artist"=>$this->song['artist_name']));
 			$this->save_album($album, $this->song['artist_id']);
-			if (isset($this->duplicate_song_id)&&$this->duplicate_song_id!="")
+			if(!empty($this->duplicate_song_id))
 			{
-				$this->db->query("DELETE FROM music_songs WHERE song_id = ?",
-							array($this->song_id));
-				$this->db->query("UPDATE music_songs SET song_id= ? WHERE song_id = ?",
-							array($this->song_id, $this->duplicate_song_id));			
+				$this->CI->db->where('song_id', $this->song_id)
+					    ->delete('music_songs');
+				$this->CI->db->where('song_id', $this->duplicate_song_id)
+				->update('music_songs', array('song_id'=>$this->song_id));
+		
 			}
 			$this->add_track();
 		}
@@ -390,8 +405,8 @@ class Songtracker extends Model {
 		// Step 3a: if good match is found, add name to DB
 		// Step 3b: if no good match is found, throw error but add anyways
 
-		$artist_search = $this->db->query("SELECT * FROM music_artists WHERE artist_name = ?",
-									array(	$artist ) );
+		$artist_search = $this->CI->db->where('artist_name',$artist)
+						  ->get('music_artists');
 		
 		// Step 1 Success: Artist exists in database
 		if ( $artist_search->num_rows == 1 )
@@ -408,7 +423,7 @@ class Songtracker extends Model {
 			//            (ie to see if someone has made this mistake before)
 			if ( $exception = $this->exceptions("artist-to-id", $artist))
 			{	
-				$exception_search = $this->db->where('artist_id',$exception)->get('music_artists');
+				$exception_search = $this->CI->db->where('artist_id',$exception)->get('music_artists');
 				if($exception_search->num_rows==1)
 					return $exception;
 				else $this->log_error("Bad exception. Input: ".$artist.", Output: ".$exception.".");
@@ -419,7 +434,7 @@ class Songtracker extends Model {
 			// Get a validated name from last.fm
 			$valid = $this->lastfm_validation($artist);
 			// Check to see if the valid artist already exists
-			$existing = $this->db->query("SELECT * FROM music_artists WHERE artist_name= ?", array ($valid));
+			$existing = $this->CI->db->query("SELECT * FROM music_artists WHERE artist_name= ?", array ($valid));
 			
 			//if not, add to DB...
 			if($existing->num_rows==0)
@@ -449,8 +464,10 @@ class Songtracker extends Model {
 		// Step 2b: if no good match is found, throw error but add anyways
 		
 		// Step 1: search DB for song names similar to the name submitted
-		$song_search = $this->db->query("SELECT song_id, album_id FROM music_songs WHERE song_title = ? AND artist_id = ?",
-								array(	$song, $artist_id ));
+		$song_search = $this->CI->db->select('song_id, album_id')
+						->where('song_title', $song)
+						->where('artist_id',$artist_id)
+						->get('music_songs');
 		foreach ( $song_search->result_array() as $val)
 		{
 			if ( $val['album_id'] != 0 )
@@ -579,19 +596,16 @@ class Songtracker extends Model {
 						"artist_id" => $this->track['artist_id'],
 						"artist_name" => $this->track['artist_name'],
 						"track_id" => $this->track['playlist_track_id'],
-						"instructions"=>$this->util->page('go_live_instructions')
+						"instructions"=>$this->CI->util->page('go_live_instructions')
 						);
-		$live = $this->load->view("meta/live_info", $live_data, TRUE);
+		$live = $this->CI->load->view("meta/live_info", $live_data, TRUE);
 		$this->save_to_log();
-        if ($this->config->item('use_recording')) {
-            $this->load->library('recording');
-            $url = $this->recording->whatis('go_live_default');
-            $extension = "." . $this->recording->get_extension($url);
-            $duration['hours'] = 1; $duration['minutes'] = 0; $duration['seconds'] = 0;
-            // TODO: figure out how long the show actually is instead of guessing 1 hour
-            $this->recording->record($url, $_POST['episode'] . $extension, $duration);
-            // TODO: make the filenames something reasonable and stop using the POST data
-        }
+		$this->CI->load->library('recording');
+        $url = $this->CI->recording->whatis('go_live_default');
+        $duration['hours'] = 1; $duration['minutes'] = 0; $duration['seconds'] = 0;
+        // TODO: figure out how long the show actually is instead of guessing 1 hour
+        $this->CI->recording->record($url, $_POST['episode'], $duration);
+        // TODO: make the filenames something reasonable and stop using the POST data
 		echo json_encode(array("live"=>$live, "hide_controls"=>"false", "status" => "posted", "alert"=>$alert ));
 	}
 	function live_info( $live = FALSE )
@@ -599,7 +613,7 @@ class Songtracker extends Model {
 		$time = TRUE;
 		$onair = TRUE;
 		$hide_controls = FALSE;
-		$this->load->library('drupal');
+		$this->CI->load->library('drupal');
 		/*
 		Validation pseudocode.
 		
@@ -631,12 +645,12 @@ class Songtracker extends Model {
 		{
 			$hide_controls = TRUE;
 			$onair = FALSE;
-			$othershow_data = $this->drupal->episode_info($log[0]['episode_id']);
+			$othershow_data = $this->CI->drupal->episode_info($log[0]['episode_id']);
 			$othershow = $othershow_data['title'];
 		}
 		// Time Validation
 		
-		$episode = $this->drupal->episode_info($_POST['episode']);
+		$episode = $this->CI->drupal->episode_info($_POST['episode']);
 		
 		// Adjust for daylight savings time.
 		$remove_hour = strtotime("Second Sunday March 0");  
@@ -658,13 +672,13 @@ class Songtracker extends Model {
 		{
 			$time = FALSE;
 			$status = "early";
-			$alert = $this->load->view("meta/timing_error", array("type"=>$status), TRUE);
+			$alert = $this->CI->load->view("meta/timing_error", array("type"=>$status), TRUE);
 		}
 		elseif ( ( time() - $episode['stop'] ) > ( 60 * 10 ) ) 
 		{
 			$time = FALSE;
 			$status = "tardy";
-			$alert = $this->load->view("meta/timing_error", array("type"=>$status), TRUE);
+			$alert = $this->CI->load->view("meta/timing_error", array("type"=>$status), TRUE);
 		}
 		// END OF VALIDATION ROUTINES
 		/*if ( $live == TRUE)
@@ -701,7 +715,7 @@ class Songtracker extends Model {
 			$live_data = array ( "title" => "Go Live",
 							"id" => $_POST['id'],
 							"episode"=>$_POST['episode']);
-			$alert = $this->load->view("meta/go_live", $live_data, TRUE);
+			$alert = $this->CI->load->view("meta/go_live", $live_data, TRUE);
 		}
 		
 		// IF VALID, GET TRACK ID's 
@@ -744,7 +758,7 @@ class Songtracker extends Model {
 						"artist_id" => $this->track['artist_id'],
 						"artist_name" => $this->track['artist_name'],
 						"track_id" => $this->track['playlist_track_id'] );
-		$live = $this->load->view("meta/live_info", $live_data, TRUE);
+		$live = $this->CI->load->view("meta/live_info", $live_data, TRUE);
 		
 		if( $status == "posted") $this->save_to_log();
 		echo json_encode(array("live"=>$live, "hide_controls"=>$hide_controls, "status" => $status, "alert"=>$alert ));
@@ -769,7 +783,7 @@ class Songtracker extends Model {
 		elseif ($type == "artist")
 			$query = "SELECT * FROM music_artists";
 			
-		$result = $this->db->query($query, $data);
+		$result = $this->CI->db->query($query, $data);
 		if ($type == "song") echo "{ 'songs' : [";
 		foreach ($result->result_array() as $key=>$value) 
 		{
@@ -795,15 +809,15 @@ class Songtracker extends Model {
 	function save_artist( $name, $flag = 0)
 	{
 		$str = array("artist_name"=>utf8_encode($name), "flag"=>$flag, "date_added"=>date("Y-m-d H:i:s"));
-		$query = $this->db->insert('music_artists',$str);
-		return $this->db->insert_id();
+		$query = $this->CI->db->insert('music_artists',$str);
+		return $this->CI->db->insert_id();
 	}
 	function save_song ( $name, $artist_id, $album_id = 0, $song_track = 0, $mbid = 0, $flag = 0 )
 	{
 		$str = array("song_title"=>$name, "artist_id"=>$artist_id, "flag"=>$flag, "date_added"=>date("Y-m-d H:i:s"), "song_mbid"=>$mbid, "album_id"=>$album_id, "song_track"=>$song_track);
-		$query = $this->db->insert_string('music_songs',$str);
-		$this->db->query($query);
-		return $this->db->insert_id();
+		$query = $this->CI->db->insert_string('music_songs',$str);
+		$this->CI->db->query($query);
+		return $this->CI->db->insert_id();
 	}
 	function save_album ( $array, $artist_id, $flag = 0 )
 	{
@@ -812,7 +826,7 @@ class Songtracker extends Model {
 	*/
 		if(empty($artist_id))
 		{
-			$q = $this->db->where('artist_name', $array['artist'])->get('music_artists');
+			$q = $this->CI->db->where('artist_name', $array['artist'])->get('music_artists');
 			$temprow = $q->row();
 			$artist_id = $temprow->artist_id;
 		}
@@ -827,11 +841,11 @@ class Songtracker extends Model {
 		{
 			$str = array("album_title"=>$array['name'], "artist_id"=>$artist_id, "flag"=>$flag, "date_added"=>date("Y-m-d H:i:s"));
 			if($array['releasedate']!="") $str['album_date'] = date("Y-m-d",$array['releasedate']);
-			$this->db->insert('music_albums', $str);
-			$album_id = $this->db->insert_id();
+			$this->CI->db->insert('music_albums', $str);
+			$album_id = $this->CI->db->insert_id();
 			$update = array("album_id"=>$album_id);
-			$this->db->where('song_id', $this->song['song_id'])->update('music_songs', $update);
-			return $this->db->insert_id();
+			$this->CI->db->where('song_id', $this->song['song_id'])->update('music_songs', $update);
+			return $this->CI->db->insert_id();
 		}
 		else
 		{
@@ -843,9 +857,9 @@ class Songtracker extends Model {
 			{
 				$str = array("album_title"=>$array['name'], "artist_id"=>$artist_id, "flag"=>$flag, "date_added"=>date("Y-m-d H:i:s"));
 				if($array['releasedate']!="") $str['album_date'] = date("Y-m-d",$array['releasedate']);
-				$query = $this->db->insert_string('music_albums',$str);
-				$this->db->query($query);
-				$album_id = $this->db->insert_id();
+				$query = $this->CI->db->insert_string('music_albums',$str);
+				$this->CI->db->query($query);
+				$album_id = $this->CI->db->insert_id();
 				$i=1;
 				$similar = array();
 				foreach ( $tracklisting->release->{'track-list'}->track as $track)
@@ -863,15 +877,15 @@ class Songtracker extends Model {
 				
 				
 				
-				$this->benchmark->mark('save_image_start');			
+				$this->CI->benchmark->mark('save_image_start');			
 				$url = $array['image']['large'];
 				$img = $this->album_url($album_id, TRUE);
-				$this->util->do_post_request(site_url('meta/ajaxData/save_image'), http_build_query(array("url"=>$url, "dest"=>$img)));
-				$this->benchmark->mark('save_image_end');
-				$this->benchmark->elapsed_time('save_image_start', 'save_image_end');
+				$this->CI->util->do_post_request(site_url('meta/ajaxData/save_image'), http_build_query(array("url"=>$url, "dest"=>$img)));
+				$this->CI->benchmark->mark('save_image_end');
+				$this->CI->benchmark->elapsed_time('save_image_start', 'save_image_end');
 				
-				$this->benchmark->mark('save_album_end');
-				$this->benchmark->elapsed_time('save_album_start', 'save_album_end');
+				$this->CI->benchmark->mark('save_album_end');
+				$this->CI->benchmark->elapsed_time('save_album_start', 'save_album_end');
 	
 				return $album_id;
 			}
@@ -879,7 +893,7 @@ class Songtracker extends Model {
 	}
 	function save_to_playlist ()
 	{
-		$sort_query = $this->db->query("SELECT * FROM music_playlists WHERE episode_id= ? ORDER BY sort_order DESC",
+		$sort_query = $this->CI->db->query("SELECT * FROM music_playlists WHERE episode_id= ? ORDER BY sort_order DESC",
 									array(	$this->episode_id ) );
 		if ($sort_query->num_rows() > 0)
 		{
@@ -889,17 +903,17 @@ class Songtracker extends Model {
 		else $sort = 0;
 
 		$str = array("song_id"=>$this->song_id, "episode_id"=>$this->episode_id, "date_added"=>date("Y-m-d H:i:s"), "sort_order"=>$sort);
-		$query = $this->db->insert_string('music_playlists',$str);
-		$this->db->query($query);	
-		$track_id = $this->db->insert_id();
+		$query = $this->CI->db->insert_string('music_playlists',$str);
+		$this->CI->db->query($query);	
+		$track_id = $this->CI->db->insert_id();
 		$this->track = $this->load_data($track_id,'track');
 		return $track_id;
 	}
 	function save_to_log ()
 	{
 		$data = array(	"playlist_track_id"=>$this->track['playlist_track_id'] );
-		$insertion = $this->db->insert_string("music_log", $data);
-		$this->db->query($insertion);
+		$insertion = $this->CI->db->insert_string("music_log", $data);
+		$this->CI->db->query($insertion);
 	}
 	
 	
@@ -918,7 +932,7 @@ class Songtracker extends Model {
 	function lastfm_query( $type, $filters )
 	{
 		$marker = "lastfm_query_".$this->lastfm_count."_";
-		$this->benchmark->mark($marker.'start');
+		$this->CI->benchmark->mark($marker.'start');
 		
 		// Prepare parameters
 		$methodVars = array( 'page' => 1, 'limit' => 20);
@@ -946,8 +960,8 @@ class Songtracker extends Model {
 				$album=array();
 				if ( $results = $this->lastfm_album->getInfo($methodVars) ) 
 				{
-					$this->benchmark->mark($marker.'end');
-					$this->benchmark->elapsed_time($marker.'start', $marker.'end');
+					$this->CI->benchmark->mark($marker.'end');
+					$this->CI->benchmark->elapsed_time($marker.'start', $marker.'end');
 					$this->lastfm_count++;
 					return $results;
 				}
@@ -955,8 +969,8 @@ class Songtracker extends Model {
 			case "track.getInfo":
 				if ( $results = $this->lastfm_track->getInfo($methodVars) )
 				{
-					$this->benchmark->mark($marker.'end');
-					$this->benchmark->elapsed_time($marker.'start', $marker.'end');
+					$this->CI->benchmark->mark($marker.'end');
+					$this->CI->benchmark->elapsed_time($marker.'start', $marker.'end');
 					$this->lastfm_count++;
 					return $results;
 				}
@@ -964,15 +978,15 @@ class Songtracker extends Model {
 			case "artist.getInfo" :
 				if ( $results = $this->lastfm_artist->getInfo($methodVars) )
 				{
-					$this->benchmark->mark($marker.'end');
-					$this->benchmark->elapsed_time($marker.'start', $marker.'end');
+					$this->CI->benchmark->mark($marker.'end');
+					$this->CI->benchmark->elapsed_time($marker.'start', $marker.'end');
 					$this->lastfm_count++;
 					return $results;
 				}
 				break;
 		}
-		$this->benchmark->mark($marker.'end');
-		$this->benchmark->elapsed_time($marker.'start', $marker.'end');
+		$this->CI->benchmark->mark($marker.'end');
+		$this->CI->benchmark->elapsed_time($marker.'start', $marker.'end');
 		$this->lastfm_count++;
 	}
 	function lastfm_validation( $artist, $url = '')
@@ -1004,18 +1018,18 @@ class Songtracker extends Model {
 			$data = array ( 	"type"=>"artist-to-id", 
 								"input"=>$val['artist_name'], 
 								"output"=>$val['id'] );
-			$exceptions = $this->db->insert_string('music_exceptions', $data );
-			$this->db->query($exceptions);
+			$exceptions = $this->CI->db->insert_string('music_exceptions', $data );
+			$this->CI->db->query($exceptions);
 			
 			// Check to see if this artist already exists.
-			$existing = $this->db->query("SELECT * FROM music_artists WHERE artist_name= ? COLLATE utf8_general_ci", array ($val['new']));
+			$existing = $this->CI->db->query("SELECT * FROM music_artists WHERE artist_name= ? COLLATE utf8_general_ci", array ($val['new']));
 			if($existing->num_rows==0)
 			{
 				// If not, change the name of the database record
 				$data2 = array('artist_name' => $val['new'], 'valid'=>1);
 				$where = "artist_id = ".$val['id'];
-				$update = $this->db->update_string('music_artists', $data2, $where); 
-				$this->db->query($update);
+				$update = $this->CI->db->update_string('music_artists', $data2, $where); 
+				$this->CI->db->query($update);
 			}
 			elseif($existing->num_rows==1)
 			{
@@ -1032,19 +1046,19 @@ class Songtracker extends Model {
 			case "artist":
 			
 				//Add an exception so this never happens again.
-				$name_query = $this->db->query("SELECT artist_name FROM music_artists WHERE artist_id = ?", array($invalid));
+				$name_query = $this->CI->db->query("SELECT artist_name FROM music_artists WHERE artist_id = ?", array($invalid));
 				$name = $name_query->row(); 
 				$exception_data = array("type"=>"artist-to-id", "input"=>$name->artist_name, "output"=>$valid); 
-				$this->db->query($this->db->insert_string("music_exceptions", $exception_data));
+				$this->CI->db->query($this->CI->db->insert_string("music_exceptions", $exception_data));
 				
 				$data = array ("artist_id"=>$valid);
 				$where = "artist_id=".$invalid;
 				// update the song table
-				$this->db->query($this->db->update_string('music_songs',$data, $where));
+				$this->CI->db->query($this->CI->db->update_string('music_songs',$data, $where));
 				// update the album table
-				$this->db->query($this->db->update_string('music_albums',$data, $where));
+				$this->CI->db->query($this->CI->db->update_string('music_albums',$data, $where));
 				// delete invalid artist row
-				$this->db->query("DELETE FROM music_artists WHERE artist_id=".$invalid);
+				$this->CI->db->query("DELETE FROM music_artists WHERE artist_id=".$invalid);
 				break;
 		}
 	}
@@ -1053,7 +1067,7 @@ class Songtracker extends Model {
 	{
 	
 		$marker = "mb_query_".$this->mb_count."_";
-		$this->benchmark->mark($marker.'start');
+		$this->CI->benchmark->mark($marker.'start');
 		$url = "http://musicbrainz.org/ws/1/".$type."/?type=xml";
 		foreach ( $filters as $key=>$val)
 		{
@@ -1062,8 +1076,8 @@ class Songtracker extends Model {
 		}
 		//echo $url."\n";
 		$xml = new SimpleXMLElement($url, NULL, TRUE);
-		$this->benchmark->mark($marker.'end');
-		$this->benchmark->elapsed_time($marker.'start', $marker.'end');
+		$this->CI->benchmark->mark($marker.'end');
+		$this->CI->benchmark->elapsed_time($marker.'start', $marker.'end');
 		$this->mb_count++;
 		return ($xml);
 	}
@@ -1072,7 +1086,7 @@ class Songtracker extends Model {
 		switch ($type)
 		{
 			case "lastfm-to-musicbrainz":
-				$query = $this->db->query('SELECT * FROM music_exceptions WHERE type= ? AND input = ?',
+				$query = $this->CI->db->query('SELECT * FROM music_exceptions WHERE type= ? AND input = ?',
 									array(	$type, $item ) );
 				if ( $query->num_rows==1 )
 				{
@@ -1083,7 +1097,7 @@ class Songtracker extends Model {
 					return $item;
 				break;
 			case "artist-to-id":
-				$query = $this->db->query('SELECT * FROM music_exceptions WHERE type= ? AND input = ?', 
+				$query = $this->CI->db->query('SELECT * FROM music_exceptions WHERE type= ? AND input = ?', 
 									array($type, $item));
 				if ( $query->num_rows==1 )
 				{
@@ -1103,7 +1117,7 @@ class Songtracker extends Model {
 		$order = explode(",",$_POST['order']);
 		foreach($order as $key=>$val)
 		{
-			$this->db->query("UPDATE music_playlists SET sort_order= ? WHERE playlist_track_id= ?",
+			$this->CI->db->query("UPDATE music_playlists SET sort_order= ? WHERE playlist_track_id= ?",
 						array( $key, $val));
 		}
 	}
@@ -1131,28 +1145,28 @@ class Songtracker extends Model {
 	}
 	function reset_db()
 	{
-		$this->db->query("DELETE FROM music_songs");
-		$this->db->query("DELETE FROM music_albums");
-		$this->db->query("DELETE FROM music_playlists");
+		$this->CI->db->query("DELETE FROM music_songs");
+		$this->CI->db->query("DELETE FROM music_albums");
+		$this->CI->db->query("DELETE FROM music_playlists");
 	}
 	function remove_log()
 	{
-		$this->db->query("DELETE FROM music_log WHERE log_id=".$_POST['log_id']);
+		$this->CI->db->query("DELETE FROM music_log WHERE log_id=".$_POST['log_id']);
 	}
 	function delete_artist()
 	{
 		switch($_POST['type'])
 		{
 			case "stats":
-				$songs_query = $this->db->query("SELECT * FROM music_songs WHERE artist_id= ?", 
+				$songs_query = $this->CI->db->query("SELECT * FROM music_songs WHERE artist_id= ?", 
 											array($_POST['artist_id']));
 				$songs = $songs_query->num_rows();
 				
-				$albums_query = $this->db->query("SELECT * FROM music_albums WHERE artist_id= ?", 
+				$albums_query = $this->CI->db->query("SELECT * FROM music_albums WHERE artist_id= ?", 
 											array($_POST['artist_id']));
 				$albums= $albums_query->num_rows();
 				
-				$playlists_query = $this->db->query("SELECT * FROM music_playlists AS p INNER JOIN music_songs AS s ON s.song_id = p.song_id WHERE artist_id= ?", 
+				$playlists_query = $this->CI->db->query("SELECT * FROM music_playlists AS p INNER JOIN music_songs AS s ON s.song_id = p.song_id WHERE artist_id= ?", 
 											array($_POST['artist_id']));
 				$playlists= $playlists_query->num_rows();
 				echo "<p>Deleting this artist will also delete:</p>";
@@ -1165,7 +1179,7 @@ class Songtracker extends Model {
 			case "merge-list":
 				echo "<p>Merge this artist into:</p>";
 				echo "<select id='merge_options' style='font-size: 12px;'>";
-				$artist_query = $this->db->query("SELECT * FROM music_artists ORDER BY artist_name ASC");
+				$artist_query = $this->CI->db->query("SELECT * FROM music_artists ORDER BY artist_name ASC");
 				foreach($artist_query->result_array() as $info)
 				{
 					echo "<option value='".$info['artist_id']."'>".$info['artist_name']."</option>";
@@ -1176,17 +1190,17 @@ class Songtracker extends Model {
 				$this->merge("artist",$_POST['new_artist_id'], $_POST['artist_id']);
 				break;
 			case "delete":
-				$this->db->delete('music_exceptions', array('output'=>$_POST['artist_id']));
-				$this->db->query("DELETE FROM music_albums WHERE artist_id = ?",array($_POST['artist_id']));
-				$this->db->query("DELETE FROM music_artists WHERE artist_id = ?",array($_POST['artist_id']));
-				$tracks_query = $this->db->query("SELECT * FROM music_playlists AS p INNER JOIN music_songs AS s ON p.song_id = s.song_id WHERE s.artist_id = ?",array($_POST['artist_id']));
+				$this->CI->db->delete('music_exceptions', array('output'=>$_POST['artist_id']));
+				$this->CI->db->query("DELETE FROM music_albums WHERE artist_id = ?",array($_POST['artist_id']));
+				$this->CI->db->query("DELETE FROM music_artists WHERE artist_id = ?",array($_POST['artist_id']));
+				$tracks_query = $this->CI->db->query("SELECT * FROM music_playlists AS p INNER JOIN music_songs AS s ON p.song_id = s.song_id WHERE s.artist_id = ?",array($_POST['artist_id']));
 				$tracks = array();
 				foreach ( $tracks_array->result_array() as $row)
 				{
 					$tracks[] = $row['playlist_track_id'];
 				}
 				foreach ( $tracks as $val)
-					$this->db->query("DELETE FROM music_playlists WHERE playlist_track_id = ?", array($val));
+					$this->CI->db->query("DELETE FROM music_playlists WHERE playlist_track_id = ?", array($val));
 				break;
 		}
 	}
@@ -1242,7 +1256,7 @@ class Songtracker extends Model {
 					"correction"=>$_POST['correction'],
 					"author_id"=>$_POST['author_id'],
 					"created"=>date("Y-m-d H:i:s"));
-		$this->db->insert("music_flags",$d);
+		$this->CI->db->insert("music_flags",$d);
 	}
 	function edit_album()
 	{
@@ -1265,35 +1279,35 @@ class Songtracker extends Model {
 			}
 			if(!empty($id)&&!empty($update))
 			{
-				$this->db->where('song_id',$id)->update('music_songs',$update);
+				$this->CI->db->where('song_id',$id)->update('music_songs',$update);
 			}
 		}
 	}
 	function delete_song( $id )
 	{
-		$p = $this->db->where('song_id',$id)->get('music_playlists');
+		$p = $this->CI->db->where('song_id',$id)->get('music_playlists');
 		$playlists = $p->num_rows;
 		if($playlists==0)
 		{
-			$this->db->where('song_id', $id)->delete('music_songs');
+			$this->CI->db->where('song_id', $id)->delete('music_songs');
 		}
 		else
 		{	
 			$update = array ( "album_id"=>NULL);
-			$this->db->where('song_id', $id)->update('music_songs', $update);
+			$this->CI->db->where('song_id', $id)->update('music_songs', $update);
 		}
 	}
 	function album_info( $id, $tracks = TRUE, $stats = TRUE )
 	{
 		if(empty($id)) return false;
 		
-		$album_query = $this->db->from("music_albums AS L ")
+		$album_query = $this->CI->db->from("music_albums AS L ")
 								->join("music_artists AS A ", "A.artist_id = L.artist_id")
 								->where('album_id', $id)
 								->get();
 		$album_data = $album_query->row_array();
 		
-		$tracks_query = $this->db->where('album_id', $id)->order_by("song_track", "ASC")->get('music_songs');
+		$tracks_query = $this->CI->db->where('album_id', $id)->order_by("song_track", "ASC")->get('music_songs');
 		$tracks_data = $tracks_query->result_array();
 		
 		$album = array ( 	"id" => $id,
@@ -1521,7 +1535,7 @@ class Songtracker extends Model {
 	}
 	function artist_info ( $id )
 	{
-		$q = $this->db->where('artist_id', $id)->get('music_artists');
+		$q = $this->CI->db->where('artist_id', $id)->get('music_artists');
 		$row = $q->row();
 		$row->info = $this->lastfm_query("artist.getInfo", array("artist"=>$row->artist_name));
 		return $row;
@@ -1690,7 +1704,7 @@ class Songtracker extends Model {
 		
 		$where = "WHERE ( l.log_time BETWEEN '".date("Y-m-d H:i:s", strtotime($start))."' AND '".date("Y-m-d H:i:s")."' )";
 		$where .= " AND ( ".$type." = ".$id." )";
-		$log_query = $this->db->query("SELECT l.log_id, l.log_time, l.playlist_track_id
+		$log_query = $this->CI->db->query("SELECT l.log_id, l.log_time, l.playlist_track_id
                     			FROM music_log AS l
                    			INNER JOIN music_playlists AS p ON l.playlist_track_id = p.playlist_track_id
                     			INNER JOIN music_episodes AS e ON p.episode_id = e.episode_id
@@ -1704,9 +1718,9 @@ class Songtracker extends Model {
 	function album_url( $id = NULL, $show_path = FALSE )
 	{
 		if($show_path)
-			$path = $this->config->item('path_img')."albums/";
+			$path = $this->CI->config->item('path_img')."albums/";
 		else
-			$path =  $this->config->item('url_img')."albums/";
+			$path =  $this->CI->config->item('url_img')."albums/";
 		if(!empty($id))
 			return $path.$id.".jpg";
 		else
@@ -1714,26 +1728,26 @@ class Songtracker extends Model {
 	}
 	function load_flags()
 	{
-		$q = $this->db->where("resolved", "0000-00-00 00:00:00")->get("music_flags");
+		$q = $this->CI->db->where("resolved", "0000-00-00 00:00:00")->get("music_flags");
 		$r = $q->result_array();
 		$f = array();
 		foreach( $r as $key=>$val)
 		{
 			if($val['type']=="song")
 			{
-				$iq = $this->db->where('song_id', $val['item_id'])->get('music_songs');
+				$iq = $this->CI->db->where('song_id', $val['item_id'])->get('music_songs');
 				$ir = $iq->row_array();
 				$val['item'] = $ir['song_title'];
 			}
 			elseif($val['type']=="artist")
 			{
-				$iq = $this->db->where('artist_id', $val['item_id'])->get('music_artists');
+				$iq = $this->CI->db->where('artist_id', $val['item_id'])->get('music_artists');
 				$ir = $iq->row_array();
 				$val['item'] = $ir['artist_name'];
 			}
 			elseif($val['type'] == "album")
 			{
-				$iq = $this->db->where('album_id', $val['item_id'])->get('music_albums');
+				$iq = $this->CI->db->where('album_id', $val['item_id'])->get('music_albums');
 				$ir = $iq->row_array();
 				$val['item'] = $ir['album_title'];
 			}
@@ -1744,14 +1758,14 @@ class Songtracker extends Model {
 	function log_error($error)
 	{
 		$data = array(	"error"=>$error,
-					"url"=>$this->uri->uri_string(),
+					"url"=>$this->CI->uri->uri_string(),
 					"date"=>date("Y-m-d H:i:s"));
-		$this->db->insert('errors',$data);
+		$this->CI->db->insert('errors',$data);
 	}
 	function new_exception($type, $in, $out)
 	{
 		//check for duplicates
-		$q = $this->db->where('type',"artist-to-id")->where('input',$in)->get('music_exceptions');
+		$q = $this->CI->db->where('type',"artist-to-id")->where('input',$in)->get('music_exceptions');
 		
 		// if found
 		if($q->num_rows!=0)
@@ -1762,12 +1776,12 @@ class Songtracker extends Model {
 			$this->log_error("Duplicate exception. Exception ID: ".$qr->exception_id.". Input: ".$in.". Old Output: ".$qr->output.". New Output: ".$out.".");
 			// update old exception
 			$data = array ( "output"=>$out);
-			$this->db->where('exception_id', $qr->exception_id)->update('music_exceptions', $data);
+			$this->CI->db->where('exception_id', $qr->exception_id)->update('music_exceptions', $data);
 		}
 		else
 		{
 			$data = array("type"=>$type, "input"=>$in, "output"=>$out);
-			$str = $this->db->insert("music_exceptions", $data);
+			$str = $this->CI->db->insert("music_exceptions", $data);
 		}
 	}	
 }

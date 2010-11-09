@@ -7,7 +7,6 @@ class Root extends Controller {
 	function __construct()
 	{
 		parent::__construct();
-		//$this->load->model('songtracker');
 		$this->load->helper('url');
 	}
 	
