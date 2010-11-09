@@ -55,42 +55,28 @@ class Drupal
 		$table = $this->ci->util->do_post_request("http://dev.wybcx.com/infinity.php", $data,NULL, TRUE);
 		echo $table;
 	}
-	public function list_shows( $user = NULL)	
+	
+	/**
+	*	List a user's shows
+	*	@param int $user_id
+	*/
+	public function list_shows( $user_id= NULL)	
 	{
-		if ( empty ( $user ) ) $user = $this->ci->session->userdata('user_id');
-		/*
-		$q = $this->db->from("node AS n ")
-					->join("content_type_show AS s ", "n.nid = s.nid")
-					->where("n.uid", $user)
-					->or_where("s.field_additional_djs_uid", $user)
-					->get();
-		return $q->result_array();
-		
-		$sql =     "SELECT * FROM node AS n 
-				JOIN content_type_show AS s 
-				ON n.nid = s.nid
-				WHERE n.uid = ".$this->ci->db->escape_str($user)."
-				OR s.field_additional_djs_uid = ".$this->ci->db->escape_str($user);
-		*/
+		if(empty($user_id)) $user_id = $this->ci->session->userdata('user_id');
 		$sql =     "SELECT * FROM node AS n 
 				JOIN content_field_additional_djs AS s 
 				ON n.nid = s.nid
-				WHERE s.field_additional_djs_uid = ".$this->ci->db->escape_str($user);
+				WHERE s.field_additional_djs_uid = ".$this->ci->db->escape_str($user_id);
 				
 		return $this->api_call($sql);
-		
 	}
+	
+	/**
+	*	List episodes of a show
+	*	@param int $show_id
+	*/
 	public function list_episodes ( $show_id )
 	{
-		/*
-		$q = $this->db->from("node AS n ")
-					->join("content_type_episode AS e ", "e.nid = n.nid")
-					->join("content_field_episode_time AS t ", "t.nid = n.nid")
-					->where("e.field_show_nid",$show_id)
-					->get();
-					
-		return $q->result_array();
-		*/
 		$sql = 	"SELECT * FROM node AS n
 				JOIN content_type_episode AS e 
 				ON e.nid = n.nid
@@ -98,8 +84,7 @@ class Drupal
 				ON t.nid = n.nid
 				WHERE e.field_show_nid = ".$this->ci->db->escape_str($show_id)."
 				ORDER BY t.field_episode_time_value ASC";
-		$r = $this->api_call($sql);
-		return $r;
+		return $this->api_call($sql);
 	}
 	
 	public function episode_info ( $episode_id )

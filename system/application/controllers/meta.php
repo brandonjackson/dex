@@ -9,7 +9,8 @@ var $user_id;
 	function Meta()
 	{
 		parent::Controller();
-		$this->load->model('songtracker');
+		$this->load->library('songtracker');
+		$this->load->model('album');
 		$this->member_id = $this->session->userdata('member_id');
 		$this->user_id = $this->session->userdata("user_id");
 		$this->data['js'] = array();
@@ -39,8 +40,14 @@ var $user_id;
 		$this->load->view('meta/episodes', $this->data);
 		$this->load->view('footer', $this->data);
 	}
+	
+	/**
+	*	Playlist interface
+	*	@param int $id		Episode ID
+	*/
 	function playlist( $id = NULL )
 	{
+		// No episode selected
 		if(empty($id))
 		{
 			$this->session->set_flashdata('error', 'No episode selected.');
@@ -329,18 +336,7 @@ var $user_id;
 		$this->data['title'] = "The WYBC Podcaster";
 		$this->load->view('meta/podcast', $this->data);
 	}
-	function add_album()
-	{
-		$album = $this->songtracker->find_album("Passion Pit", NULL, "Chunk of Change");
-		$this->songtracker->save_album($album[0]);
-		
-		//echo $this->songtracker->save_album(array('name'=>'Chunk of change', 'artist'=>'Passion Pit'), '462'); 
-	}
-	function get_my_shows()
-	{
-		$this->load->library('drupal');
-		$this->drupal->list_episodes(127);
-	}
+
 	function archives( $id )
 	{	
 		$dir = "/Volumes/sharkhives/".$id.".mp3";

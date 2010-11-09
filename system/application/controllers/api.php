@@ -8,7 +8,7 @@ function __construct()
 	{
 		parent::__construct();
 		parse_str($_SERVER['QUERY_STRING'],$_GET); // parse get variables
-		$this->load->model('songtracker');
+		$this->load->library('songtracker');
 	}
 	
 	function index()

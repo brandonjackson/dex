@@ -5,7 +5,7 @@ class Songs extends Controller {
 	function Songs()
 	{
 		parent::Controller();
-		$this->load->model('songtracker');
+		$this->load->library('songtracker');
 		$this->load->helper('url');
 	}
 	function index()

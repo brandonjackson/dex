@@ -538,8 +538,6 @@ var $data;
 		else
 		{
 			$this->data['title'] = "New Event";
-			/*$this->data['js'][] = 'songtracker-ui.php';
-			$this->load->view('header', $this->data);*/
 			$this->load->view('roster/events/new', $this->data);
 			$this->load->view('footer', $this->data);
 		}
