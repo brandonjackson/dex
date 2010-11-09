@@ -601,7 +601,7 @@ class Songtracker {
 		$live = $this->CI->load->view("meta/live_info", $live_data, TRUE);
 		$this->save_to_log();
 		
-        if ($this->config->item('use_recording')) {
+        if ($this->CI->config->item('use_recording')) {
             $this->CI->load->library('recording');
             $url = $this->CI->recording->whatis('go_live_default');
             $extension = "." . $this->CI->recording->get_extension($url);
